@@ -13,15 +13,12 @@ export async function errorHandling(context) {
   const env = context.env;
   if (!disableTelemetry) {
     context.data.telemetry = true;
-    let remoteSampleRate = 0.001;
-    try {
-      const sampleRate = await fetchSampleRate(context)
-      //check if the sample rate is not null
-      if (sampleRate) {
-        remoteSampleRate = sampleRate;
-      }
-    } catch (e) { console.log(e) }
-    const sampleRate = env.sampleRate || remoteSampleRate;
+    // 直接使用本地配置，默认采样率为 100%，无需请求远程配置。
+    const configuredSampleRate = Number(env.sampleRate ?? 1);
+    const sampleRate = Number.isFinite(configuredSampleRate)
+      && configuredSampleRate >= 0 && configuredSampleRate <= 1
+      ? configuredSampleRate
+      : 1;
     return sentryPlugin({
       dsn: "https://44b7b443108ec6d298044b125ff89d28@o4507644548022272.ingest.us.sentry.io/4507644555100160",
       tracesSampleRate: sampleRate,
@@ -102,16 +99,6 @@ export async function traceData(context, span, op, name) {
   }
 }
 
-async function fetchSampleRate(context) {
-  const data = context.data
-  if (data.telemetry) {
-    const url = "https://frozen-sentinel.pages.dev/signal/sampleRate.json";
-    const response = await fetch(url);
-    const json = await response.json();
-    return json.rate;
-  }
-}
-
 // 检查数据库是否配置
 export async function checkDatabaseConfig(context) {
   var env = context.env;
@@ -123,7 +110,7 @@ export async function checkDatabaseConfig(context) {
       JSON.stringify({
         success: false,
         error: "数据库未配置 / Database not configured",
-        message: "请配置 D1 数据库 (env.img_d1) 或 KV 存储 (env.img_url)。 / Please configure D1 database (env.img_d1) or KV storage (env.img_url)."
+        message: "请配置 KV 存储 (env.img_url) 或 D1 数据库 (env.img_d1)。 / Please configure KV storage (env.img_url) or D1 database (env.img_d1)."
       }),
       {
         status: 500,
